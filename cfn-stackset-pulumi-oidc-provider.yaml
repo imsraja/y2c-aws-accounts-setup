@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Pulumi Cloud OIDC Provider'
+
+Parameters:
+  PulumiOrgName:
+    Type: String
+    Description: Pulumi Organization Name
+    Default: "Yes2Cloud"
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      Abbr: "use1"
+    ap-southeast-2:
+      Abbr: "apse2"
+
+Resources:
+  PulumiOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://api.pulumi.com/oidc
+      ClientIdList:
+        - !Sub "${PulumiOrgName}"
+      Tags:
+        - Key: "Org"
+          Value: "Yes2Cloud"
+        - Key: "Owner"
+          Value: "Suresh"
+
+  PulumiExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 
+        - "Y2C-PulumiExecutionRole-${AWS::AccountId}-${RegionAbbr}"
+        - RegionAbbr: !FindInMap [RegionMap, !Ref "AWS::Region", Abbr]
+      Tags:
+        - Key: "Org"
+          Value: "Yes2Cloud"
+        - Key: "Owner"
+          Value: "Suresh"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref PulumiOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "api.pulumi.com/oidc:aud": !Sub "${PulumiOrgName}"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/PowerUserAccess  # Adjust as needed
+      
+Outputs:
+  OIDCProviderArn:
+    Description: ARN of the Pulumi OIDC Provider
+    Value: !Ref PulumiOIDCProvider
+    Export:
+      Name: !Sub "${AWS::StackName}-PulumiOIDCProvider"
+  
+  ExecutionRoleArn:
+    Description: ARN of the Pulumi Execution Role
+    Value: !GetAtt PulumiExecutionRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-PulumiExecutionRole"

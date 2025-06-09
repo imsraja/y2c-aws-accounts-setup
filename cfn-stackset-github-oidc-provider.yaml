@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'GitHub OIDC Provider for AWS Integration'
+
+Parameters: 
+  GitHubOrgName:
+    Type: String
+    Description: GitHub Organization Name
+    Default: "Yes2Cloud"
+  
+  GitHubUsername:
+    Type: String
+    Description: GitHub Username
+    Default: "imsraja"
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      Abbr: "use1"
+    ap-southeast-2:
+      Abbr: "apse2"
+
+Resources:
+  # GitHub OIDC Identity Provider
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - Key: "Org"
+          Value: "Yes2Cloud"
+        - Key: "Owner"
+          Value: "Suresh"
+
+  # IAM Role for GitHub Actions
+  GitHubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 
+        - "Y2C-GithubOIDCRole-${AWS::AccountId}-${RegionAbbr}"
+        - RegionAbbr: !FindInMap [RegionMap, !Ref "AWS::Region", Abbr]
+      Description: !Sub "GitHub OIDC role for ${AWS::AccountId}"
+      MaxSessionDuration: 3600  # 1 hour
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+              StringLike:
+                "token.actions.githubusercontent.com:sub": 
+                  # Allow repos from GitHub organization
+                  - !Sub "repo:${GitHubOrgName}/*"
+                  # Allow repos from GitHub username
+                  - !Sub "repo:${GitHubUsername}/*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/PowerUserAccess
+      Tags:
+        - Key: "Org"
+          Value: "Yes2Cloud"
+        - Key: "Owner"
+          Value: "Suresh"
+
+Outputs:
+  GitHubOIDCProviderArn:
+    Description: ARN of the GitHub OIDC Provider
+    Value: !Ref GitHubOIDCProvider
+    Export:
+      Name: !Sub "${AWS::StackName}-GitHubOIDCProvider"
+  
+  GitHubActionsRoleArn:
+    Description: ARN of the GitHub Actions Role
+    Value: !GetAtt GitHubActionsRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-GitHubActionsRole"
+  
+  GitHubActionsRoleName:
+    Description: Name of the GitHub Actions Role
+    Value: !Ref GitHubActionsRole
+    Export:
+      Name: !Sub "${AWS::StackName}-GitHubActionsRoleName"
